@@ -215,102 +215,87 @@ def parse_bullet_entry(block: str, source: str) -> List[LedgerEntry]:
     return out
 
 
-def parse_comment_entries(comment_text: str, source: str) -> List[LedgerEntry]:
-    """Parse entries from comment text using both table and bullet approaches."""
+def parse_comment_entries(comment_body: str, source: str) -> List[LedgerEntry]:
+    """Parse all entries from a comment body."""
     entries: List[LedgerEntry] = []
 
-    # Try table-like rows first
-    entries.extend(parse_table_like_rows(comment_text, source))
+    # Parse table-like rows
+    entries.extend(parse_table_like_rows(comment_body, source))
 
-    # Try bullet blocks
-    blocks = split_bullet_blocks(comment_text)
+    # Parse bullet blocks
+    blocks = split_bullet_blocks(comment_body)
     for block in blocks:
         entries.extend(parse_bullet_entry(block, source))
 
     return entries
 
 
-def load_entries(args: argparse.Namespace) -> List[LedgerEntry]:
-    """Load all ledger entries from issue and comments."""
-    entries: List[LedgerEntry] = []
+def main() -> None:
+    args = parse_args()
 
-    # Load from issue body if not comments-only
-    if not args.comments_only:
-        try:
-            with open(args.issue_json) as f:
-                issue_data = json.load(f)
-            body = issue_data.get("body", "")
-            entries.extend(parse_ledger_table(body, "body"))
-        except (FileNotFoundError, json.JSONDecodeError) as e:
-            print(f"Warning: Could not load issue JSON: {e}")
+    all_entries: List[LedgerEntry] = []
 
-    # Load from comments
-    try:
+    # Parse issue body if not comments-only
+    if not args.comments_only and Path(args.issue_json).exists():
+        with open(args.issue_json) as f:
+            issue_data = json.load(f)
+        body_entries = parse_ledger_table(issue_data.get("body", ""), "body")
+        all_entries.extend(body_entries)
+        print(f"Found {len(body_entries)} entries in issue body")
+
+    # Parse comments
+    if Path(args.comments_json).exists():
         with open(args.comments_json) as f:
             comments_data = json.load(f)
+
         for i, comment in enumerate(comments_data):
-            comment_text = comment.get("body", "")
-            source = f"comment-{i + 1}"
-            entries.extend(parse_comment_entries(comment_text, source))
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        print(f"Warning: Could not load comments JSON: {e}")
+            comment_entries = parse_comment_entries(
+                comment.get("body", ""), f"comment-{i}"
+            )
+            all_entries.extend(comment_entries)
 
-    return entries
+        print(
+            f"Found {len(all_entries) - (0 if args.comments_only else len(body_entries))} entries in comments"
+        )
 
+    # Filter out voided entries
+    valid_entries = [e for e in all_entries if e.status != "voided"]
+    print(f"Total valid entries: {len(valid_entries)}")
 
-def apply_xp_updates(
-    entries: List[LedgerEntry], tracker_path: str, dry_run: bool
-) -> None:
-    """Apply XP updates using the tracker API."""
+    if args.dry_run:
+        for entry in valid_entries:
+            tier = tier_for_amount(entry.amount)
+            print(
+                f"Would apply {tier} XP to {entry.user} (amount: {entry.amount} RTC, pending: {entry.pending_id})"
+            )
+        return
+
+    # Apply XP using the API script
     script_path = Path(__file__).parent / "update_xp_tracker_api.py"
 
-    for entry in entries:
-        if entry.status == "voided":
-            print(f"Skipping voided entry: {entry.user} {entry.amount} RTC")
-            continue
-
+    for entry in valid_entries:
         tier = tier_for_amount(entry.amount)
         cmd = [
             "python3",
             str(script_path),
             "--local",
-            tracker_path,
+            "--tracker",
+            args.tracker,
             "--user",
             entry.user,
             "--tier",
             tier,
             "--source",
-            f"issue-104-{entry.source}-{entry.pending_id}",
+            f"backfill-104-{entry.pending_id}",
         ]
 
-        if dry_run:
-            print(f"DRY RUN: {' '.join(cmd)}")
-        else:
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                print(f"Applied XP: {entry.user} +{tier} ({entry.amount} RTC)")
-            except subprocess.CalledProcessError as e:
-                print(f"Error applying XP for {entry.user}: {e}")
-                print(f"Stdout: {e.stdout}")
-                print(f"Stderr: {e.stderr}")
-
-
-def main() -> None:
-    args = parse_args()
-    entries = load_entries(args)
-
-    print(f"Loaded {len(entries)} entries")
-
-    # Show summary
-    by_status = {}
-    for entry in entries:
-        by_status.setdefault(entry.status, []).append(entry)
-
-    for status, status_entries in by_status.items():
-        print(f"  {status}: {len(status_entries)} entries")
-
-    # Apply updates
-    apply_xp_updates(entries, args.tracker, args.dry_run)
+        print(f"Applying {tier} XP to {entry.user} (pending: {entry.pending_id})")
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error applying XP for {entry.user}: {e}")
+            print(f"Stdout: {e.stdout}")
+            print(f"Stderr: {e.stderr}")
 
 
 if __name__ == "__main__":
