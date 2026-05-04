@@ -1,0 +1,19 @@
+{
+  "wallet": "AhqbFaPBPLMMiaLDzA9WhQcyvv4hMxiteLhPk3NhG1iG",
+  "github_user": "unknown",
+  "total_xp": 1,
+  "tier": "micro",
+  "bounties_completed": 1,
+  "last_activity": "2024-12-19",
+  "activities": [
+    {
+      "type": "pr_review",
+      "pr_number": 3219,
+      "review_id": "4216648492",
+      "bounty_issue": 2634,
+      "xp_earned": 1,
+      "date": "2024-12-19",
+      "description": "PR Review: Bounty Solution for #2634 - Human Verification Campaign"
+    }
+  ]
+}
