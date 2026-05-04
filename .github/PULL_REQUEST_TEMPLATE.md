@@ -50,6 +50,15 @@ Suggested gate for maintainers: >=13/20 total and Correctness > 0.
 - [ ] No secrets or credentials committed
 - [ ] Submission does not match any global disqualifier
 
+## PR Review Claim
+
+**Review Type**: [COMMENT/APPROVAL/REQUEST_CHANGES]
+
+**Review ID**: [GitHub Review ID]
+
+**Summary**: [Brief description of the review provided]
+
+**Payment Requested**: [Amount in RTC]
 
 ## Supply-Chain Proof (Required if changed)
 
@@ -64,4 +73,5 @@ Proof details:
 - Dependency diff summary:
 - SHA/checksum/digest:
 - Repro command used by reviewer:
+
 
